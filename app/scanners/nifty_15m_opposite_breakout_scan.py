@@ -244,7 +244,7 @@ def scan_nifty_stocks():
             continue
 
         results.append({
-            "Stock": r["stock_name"],
+            "Stock Name": r["stock_name"],
             "Security ID": sec_id,
             "Signal": signal,
             "Price": price,
