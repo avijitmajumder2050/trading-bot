@@ -64,6 +64,7 @@ def main():
     loop.create_task(insidebar_breakout_tracker())
     loop.create_task(opposite_15m_scheduler())
     loop.create_task(opposite_15m_breakout_tracker())
+    terminate_at(target_hour=0, target_minute=40)
 
     # Start polling
     app.run_polling()

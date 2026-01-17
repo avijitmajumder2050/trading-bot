@@ -1,11 +1,13 @@
 # app/bot/scheduler.py
 import asyncio
 import logging
+import boto3
 from datetime import datetime, time
 from app.config.settings import IST, INSIDEBAR_SCAN_TIME
 from app.bot.telegram_sender import send_telegram_message
 from app.scanners.inside_bar_15min_RS80 import run_inside_bar_algo_scan
 from app.scanners.inside_bar_algo import track_insidebar_algo_breakouts_bot
+from app.utils.get_instance_id import get_instance_id  # your existing function
 from app.scanners.nifty_15m_opposite_breakout_scan import (
     build_opposite_ranges,
     scan_nifty_stocks
@@ -188,3 +190,31 @@ async def opposite_15m_breakout_tracker():
             logging.error(f"❌ Opposite breakout tracker error: {e}")
 
         await asyncio.sleep(5)
+
+
+# --------------------------
+# EC2 Termination Scheduler
+# --------------------------
+def terminate_instance(instance_id, region="ap-south-1"):
+    try:
+        ec2 = boto3.client("ec2", region_name=region)
+        ec2.terminate_instances(InstanceIds=[instance_id])
+        logging.info(f"✅ Termination command sent for instance: {instance_id}")
+    except Exception as e:
+        logging.error(f"❌ Termination failed: {e}")
+
+async def terminate_at(target_hour=10, target_minute=40):
+    instance_id = get_instance_id()
+    if not instance_id or instance_id == "UNKNOWN":
+        logging.error("❌ Cannot terminate — instance ID not found")
+        return
+
+    while True:
+        now = datetime.now()
+        if now.hour == target_hour and now.minute == target_minute:
+            logging.info(f"🕓 Time reached {target_hour}:{target_minute}, terminating instance...")
+            terminate_instance(instance_id)
+            break
+        await asyncio.sleep(20)
+
+
