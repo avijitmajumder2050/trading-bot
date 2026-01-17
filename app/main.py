@@ -9,6 +9,7 @@ from app.bot.scheduler import (
     insidebar_breakout_tracker,
     opposite_15m_scheduler,
     opposite_15m_breakout_tracker,
+    terminate_at
 )
 from app.config.aws_ssm import get_param
 
@@ -64,8 +65,7 @@ def main():
     loop.create_task(insidebar_breakout_tracker())
     loop.create_task(opposite_15m_scheduler())
     loop.create_task(opposite_15m_breakout_tracker())
-    terminate_at(target_hour=0, target_minute=40)
-
+    loop.create_task(terminate_at(target_hour=0, target_minute=45))  # <-- fix here
     # Start polling
     app.run_polling()
 
