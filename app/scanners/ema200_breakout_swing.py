@@ -51,8 +51,16 @@ def read_csv_from_s3(bucket: str, key: str) -> pd.DataFrame:
     obj = s3.get_object(Bucket=bucket, Key=key)
     return pd.read_csv(io.BytesIO(obj["Body"].read()))
 
+def upload_file_to_s3(local_path: str, bucket: str, s3_key: str):
+    try:
+        s3.upload_file(local_path, bucket, s3_key)
+        print(f"☁️ Uploaded to S3 → s3://{bucket}/{s3_key}")
+    except Exception as e:
+        print(f"❌ S3 upload failed for {local_path}: {e}")
+
+# === Main EMA200 scanner ===
 def run_ema200_scanner():
-    # === Load mapping file from S3 ===
+    # Load mapping file from S3
     df_map = read_csv_from_s3(S3_BUCKET, MAP_FILE_KEY)[["Stock Name", "Instrument ID"]].dropna()
     df_map["Instrument ID"] = df_map["Instrument ID"].astype(int)
 
@@ -116,6 +124,21 @@ def run_ema200_scanner():
         print(f"\n⚠️ Watchlist saved → {OUTPUT_WATCHLIST}")
     else:
         print("\nℹ️ No stocks in watchlist today")
+
+    # === Upload CSVs to fixed S3 path ===
+    if os.path.exists(OUTPUT_ALIGNED):
+        upload_file_to_s3(
+            OUTPUT_ALIGNED,
+            S3_BUCKET,
+            "uploads/ema200_breakout_alignment.csv"
+        )
+
+    if os.path.exists(OUTPUT_WATCHLIST):
+        upload_file_to_s3(
+            OUTPUT_WATCHLIST,
+            S3_BUCKET,
+            "uploads/ema200_breakout_watchlist.csv"
+        )
 
     return aligned_results, watchlist_results
 
