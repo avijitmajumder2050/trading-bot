@@ -246,11 +246,12 @@ def scan_nifty_stocks():
         results.append({
             "Stock Name": r["stock_name"],
             "Security ID": sec_id,
-            "Signal": signal,
             "Price": price,
-            "Qty": qty,
+            "Signal": signal,
+            "Entry": entry,
             "SL": sl,
-            "Loss": loss,
+            "Quantity": qty,
+            "Expected Loss": loss,
             "Exposure": exposure,
         })
 
