@@ -101,7 +101,7 @@ def batch(lst, size=400):
 # ─────────────────────────────
 # Inside-Bar Breakout Tracker
 # ─────────────────────────────
-def track_insidebar_algo_breakouts():
+def track_insidebar_algo_breakouts_bot():
     global cached_fund
     df_filtered = load_csv_from_s3(FILTERED_FILE_KEY)
     if df_filtered.empty:

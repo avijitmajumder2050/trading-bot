@@ -61,3 +61,25 @@ Aligned Stocks: {aligned_str}
 Watchlist Count: {len(watchlist)}
 """
             await update.message.reply_text(msg, parse_mode="HTML")
+
+
+
+# =============================================
+# Added scan_command placeholder for main.py
+# =============================================
+async def scan_command(update: Update = None, context: ContextTypes.DEFAULT_TYPE = None):
+    """
+    Placeholder scan command for compatibility.
+    Can be used to trigger scheduled scans manually or via bot command.
+    """
+    async with ema_lock:
+        # You can run any scan here, e.g., EMA momentum or EMA cross
+        output = run_emabreakout_check()
+        symbols = format_symbol_string(output)
+        msg = f"📊 Scheduled/Manual Scan Results:\n{symbols}"
+
+        if update:
+            await update.message.reply_text(msg, parse_mode="HTML")
+        else:
+            # If no Telegram update, just log
+            print(msg)

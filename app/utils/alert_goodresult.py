@@ -28,8 +28,8 @@ logging.basicConfig(
 s3 = boto3.client("s3", region_name=AWS_REGION)
 
 # === Load credentials from SSM ===
-DHAN_CLIENT_ID = get_param("DHAN_CLIENT_ID")
-DHAN_ACCESS_TOKEN = get_param("DHAN_ACCESS_TOKEN")
+DHAN_CLIENT_ID = get_param("/dhan/client_id")
+DHAN_ACCESS_TOKEN = get_param("/dhan/access_token")
 
 # === Dhan API Setup ===
 dhan_context = DhanContext(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)

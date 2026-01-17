@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, date
 from pytz import timezone
 from dhanhq import DhanContext, dhanhq
 
-from app.config.aws_ssm import get_ssm_param
+from app.config.aws_ssm import get_param
 from app.config.aws_s3 import read_csv_from_s3
 from app.config.settings import (
     IST,
@@ -42,8 +42,8 @@ def run_emabreakout_check():
     setup_logging()
 
     # ---- Load secrets from SSM ----
-    client_id = get_ssm_param("/dhan/client_id")
-    access_token = get_ssm_param("/dhan/access_token")
+    client_id = get_param("/dhan/client_id")
+    access_token = get_param("/dhan/access_token")
 
     dhan = dhanhq(DhanContext(client_id, access_token))
 
@@ -156,3 +156,102 @@ def run_emabreakout_check():
         if matched
         else "No EMA breakout signals today"
     )
+
+
+
+# ==============================
+# EMA CROSS SCAN
+# ==============================
+def ema_cross():
+    setup_logging()
+
+    # ---- Load secrets from SSM ----
+    client_id = get_param("/dhan/client_id")
+    access_token = get_param("/dhan/access_token")
+
+    dhan = dhanhq(DhanContext(client_id, access_token))
+
+    today_date = datetime.now(IST).date()
+    today = pd.Timestamp(today_date)
+
+    # ---- Load mapping.csv from S3 ----
+    df_map = read_csv_from_s3(S3_BUCKET, MAP_FILE_KEY)
+    df_map = df_map.dropna(subset=["Stock Name", "Instrument ID", "Price Strength", "EPS Strength"])
+    df_map = df_map[(df_map["Price Strength"] > 80) & (df_map["EPS Strength"] > 60)]
+    df_map["Instrument ID"] = df_map["Instrument ID"].astype(int)
+
+    instrument_ids = df_map["Instrument ID"].tolist()
+
+    # ---- Fetch live quotes ----
+    live_data = {}
+    for i in range(0, len(instrument_ids), 1000):
+        batch = instrument_ids[i:i + 1000]
+        try:
+            resp = dhan.quote_data(securities={"NSE_EQ": batch})
+            live_data.update(resp["data"]["data"].get("NSE_EQ", {}))
+        except Exception as e:
+            logging.error(f"Quote API error: {e}")
+        time.sleep(0.5)
+
+    matched = []
+
+    # ---- Process each stock ----
+    for _, row in df_map.iterrows():
+        stock = row["Stock Name"]
+        instrument_id = row["Instrument ID"]
+        market_cap = float(row.get("Market Cap", 0))
+
+        eod_key = f"{EOD_DATA_PREFIX}/{instrument_id}.csv"
+
+        try:
+            df = read_csv_from_s3(S3_BUCKET, eod_key)
+        except Exception:
+            logging.warning(f"EOD missing for {stock}")
+            continue
+
+        if str(instrument_id) not in live_data:
+            continue
+
+        try:
+            df.columns = df.columns.str.lower()
+            df["date"] = pd.to_datetime(df["date"])
+            df.set_index("date", inplace=True)
+
+            live = live_data[str(instrument_id)]
+            ohlc = live["ohlc"]
+
+            df.loc[today] = {
+                "open": ohlc["open"],
+                "high": ohlc["high"],
+                "low": ohlc["low"],
+                "close": live["last_price"],
+                "volume": live["volume"],
+            }
+            df.sort_index(inplace=True)
+
+            if len(df) < 50:
+                continue
+
+            df["ema10"] = EMAIndicator(df["close"], 10).ema_indicator()
+            df["ema20"] = EMAIndicator(df["close"], 20).ema_indicator()
+            df["ema50"] = EMAIndicator(df["close"], 50).ema_indicator()
+
+            latest = df.iloc[-1]
+            prev = df.iloc[-2]
+
+            # EMA cross logic: current above EMA10/EMA20, previous below
+            cond_ema_cross = (
+                (latest["close"] > latest["ema10"] > latest["ema20"])
+                and (prev["close"] <= prev["ema10"])
+            )
+            overall = cond_ema_cross and market_cap > 500 and latest["volume"] > 70000
+
+            if overall:
+                logging.info(f"🚀 EMA CROSS → {stock}")
+                matched.append({"Stock": stock, "Price": latest["close"]})
+
+        except Exception as e:
+            logging.error(f"{stock} failed: {e}")
+
+    return pd.DataFrame(matched).to_csv(index=False) if matched else "No EMA cross signals today"
+
