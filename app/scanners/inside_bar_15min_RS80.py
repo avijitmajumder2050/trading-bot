@@ -1,12 +1,44 @@
-# app/scanners/inside_bar_15min_RS80.py
+# ==========================================================
+# File: inside_bar_15min_RS80.py
+# ==========================================================
+import os
 import time
 import pandas as pd
 import pytz
+import logging
+from io import StringIO
 from datetime import datetime, date
 import boto3
+from dhanhq import DhanContext, dhanhq
+
 from app.config.settings import S3_BUCKET, AWS_REGION, IST, MAP_FILE_KEY
 from app.config.aws_ssm import get_param
-from dhanhq import DhanContext, dhanhq
+
+# ─────────────────────────────
+# LOGGING (No logic change)
+# ─────────────────────────────
+LOG_FILE = "logs/inside_bar_15min_RS80.log"
+os.makedirs("logs", exist_ok=True)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s"
+)
+
+if not logger.handlers:
+    file_handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=5*1024*1024, backupCount=5
+    )
+    file_handler.setFormatter(formatter)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+logger.propagate = False
+logger.info("🚀 Inside Bar 15min RS80 module loaded")
 
 # === Load secrets from SSM ===
 client_id = get_param("/dhan/client_id")
@@ -34,18 +66,19 @@ def read_s3_csv(key):
         obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
         df = pd.read_csv(obj['Body'])
         df.columns = df.columns.str.lower()
+        logger.info(f"📥 Loaded CSV from S3: {key} ({len(df)} rows)")
         return df
-    except Exception as e:
-        print(f"❌ Failed to read S3 CSV {key}: {e}")
+    except Exception:
+        logger.exception(f"❌ Failed to read S3 CSV {key}")
         return pd.DataFrame()
 
 def write_s3_csv(df, key):
     try:
         csv_buffer = df.to_csv(index=False)
         s3.put_object(Bucket=S3_BUCKET, Key=key, Body=csv_buffer)
-        print(f"💾 Saved CSV to S3: {key}")
-    except Exception as e:
-        print(f"❌ Failed to write CSV to S3 {key}: {e}")
+        logger.info(f"💾 Saved CSV to S3: {key}")
+    except Exception:
+        logger.exception(f"❌ Failed to write CSV to S3 {key}")
 
 # ----------------------------
 # Fetch 15-min candles
@@ -77,8 +110,8 @@ def get_15min_candles(security_id, interval):
         }).sort_values("datetime").reset_index(drop=True)
 
         return df
-    except Exception as e:
-        print(f"❌ 15min candle error for {security_id}: {e}")
+    except Exception:
+        logger.exception(f"❌ 15min candle error for {security_id}")
         return None
 
 # ----------------------------
@@ -113,7 +146,7 @@ def save_inside_bars(candle_df, map_df):
                 "2nd 15m high": c2["high"],
                 "2nd 15m low": c2["low"]
             })
-            print(f"✅ Inside Bar: {stock_name}")
+            logger.info(f"✅ Inside Bar: {stock_name}")
 
     if filtered:
         write_s3_csv(pd.DataFrame(filtered), FILTERED_KEY)
@@ -124,7 +157,7 @@ def save_inside_bars(candle_df, map_df):
 def run_inside_bar_algo_scan(interval):
     global last_insidebar_run_date
     if last_insidebar_run_date == date.today():
-        print("⏩ Inside bar scan already run today")
+        logger.info("⏩ Inside bar scan already run today")
         return
 
     df_map = read_s3_csv(MAP_FILE_KEY)
@@ -141,10 +174,10 @@ def run_inside_bar_algo_scan(interval):
         df["stock name"] = stock_name
         df["security id"] = sec_id
         all_data.append(df)
-        print(f"✅ {stock_name} — {len(df)} candles")
+        logger.info(f"✅ {stock_name} — {len(df)} candles")
 
     if not all_data:
-        print("🛑 No 15min candle data fetched.")
+        logger.warning("🛑 No 15min candle data fetched.")
         return
 
     df_candles = pd.concat(all_data, ignore_index=True)
@@ -157,9 +190,9 @@ def run_inside_bar_algo_scan(interval):
 
     last_insidebar_run_date = date.today()
 
-
 # ----------------------------
 # Main
 # ----------------------------
 if __name__ == "__main__":
+    logger.info("🔍 Running Inside-Bar 15min RS80 scan...")
     run_inside_bar_algo_scan(interval=5)

@@ -16,13 +16,15 @@ log_file = "logs/goodresult_alerts.log"
 os.makedirs("logs", exist_ok=True)
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Change to INFO to reduce debug noise
     format="%(asctime)s | %(levelname)s | %(message)s",
     handlers=[
         RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5, encoding="utf-8"),
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+logging.info("🚀 Good Result Alerts module loaded")
 
 # === AWS S3 Setup ===
 s3 = boto3.client("s3", region_name=AWS_REGION)
@@ -121,6 +123,7 @@ def load_today_data_with_ema(instrument_id, live):
 def strong_quarterly_alert():
     df_map = read_csv_from_s3(MAP_FILE_KEY)
     if df_map.empty:
+        logging.info("ℹ️ Mapping CSV is empty")
         return [], []
 
     df_map = df_map[["Stock Name", "Instrument ID", "Market Cap", "Setup_Case"]].dropna()
@@ -166,10 +169,15 @@ def strong_quarterly_alert():
     top_15 = breakout_rows[:15]
     alerts = [f"🔔 {b['symbol']} LTP {b['ltp']} > Prev High {b['prev_high']} (+{b['change']}%)" for b in top_15]
 
+    if alerts:
+        logging.info(f"🔔 Top {len(alerts)} alerts prepared")
+    else:
+        logging.info("ℹ️ No breakout alerts today")
+
     return alerts, top_15
 
 # === Run Script ===
 if __name__ == "__main__":
-    logging.info("🚀 Running stock breakout alert check...")
+    logging.info("🚀 Running strong quarterly alert check...")
     alerts, popups = strong_quarterly_alert()
-    print(alerts)
+    logging.info(f"Alerts: {alerts}")

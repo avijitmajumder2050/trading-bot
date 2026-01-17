@@ -1,3 +1,6 @@
+# ==========================================================
+# File: EMA_10_20_breakout.py
+# ==========================================================
 import time
 import logging
 import pandas as pd
@@ -17,7 +20,7 @@ from app.config.settings import (
 )
 
 # ==============================
-# LOGGING
+# LOGGING SETUP
 # ==============================
 def setup_logging():
     import os
@@ -26,14 +29,14 @@ def setup_logging():
 
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s — %(levelname)s — %(message)s",
+        format="%(asctime)s — %(levelname)s — %(filename)s:%(lineno)d — %(message)s",
         handlers=[
             logging.FileHandler(log_path),
             logging.StreamHandler()
         ],
     )
+    logging.info("🚀 EMA 10-20 Breakout module loaded")
     return log_path
-
 
 # ==============================
 # MAIN SCANNER
@@ -157,8 +160,6 @@ def run_emabreakout_check():
         else "No EMA breakout signals today"
     )
 
-
-
 # ==============================
 # EMA CROSS SCAN
 # ==============================
@@ -254,4 +255,3 @@ def ema_cross():
             logging.error(f"{stock} failed: {e}")
 
     return pd.DataFrame(matched).to_csv(index=False) if matched else "No EMA cross signals today"
-

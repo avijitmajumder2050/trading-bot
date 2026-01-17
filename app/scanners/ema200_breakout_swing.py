@@ -1,10 +1,40 @@
+# ==========================================================
+# File: ema200_breakout_swing.py
+# ==========================================================
 import os
 import io
 import boto3
 import pandas as pd
+import logging
 from ta.trend import EMAIndicator
 from datetime import datetime
 from app.config.settings import S3_BUCKET, MAP_FILE_KEY, EOD_DATA_PREFIX
+
+# ─────────────────────────────
+# LOGGING SETUP
+# ─────────────────────────────
+LOG_FILE = "logs/ema200_breakout_swing.log"
+os.makedirs("logs", exist_ok=True)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+formatter = logging.Formatter(
+    "%(asctime)s | %(levelname)s | %(filename)s:%(lineno)d | %(message)s"
+)
+
+if not logger.handlers:
+    file_handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=5*1024*1024, backupCount=5
+    )
+    file_handler.setFormatter(formatter)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+logger.propagate = False
+logger.info("🚀 EMA200 Breakout Swing module loaded")
 
 # === AWS S3 Client ===
 s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION", "ap-south-1"))
@@ -54,9 +84,9 @@ def read_csv_from_s3(bucket: str, key: str) -> pd.DataFrame:
 def upload_file_to_s3(local_path: str, bucket: str, s3_key: str):
     try:
         s3.upload_file(local_path, bucket, s3_key)
-        print(f"☁️ Uploaded to S3 → s3://{bucket}/{s3_key}")
-    except Exception as e:
-        print(f"❌ S3 upload failed for {local_path}: {e}")
+        logger.info(f"☁️ Uploaded to S3 → s3://{bucket}/{s3_key}")
+    except Exception:
+        logger.exception(f"❌ S3 upload failed for {local_path}")
 
 # === Main EMA200 scanner ===
 def run_ema200_scanner():
@@ -75,12 +105,12 @@ def run_ema200_scanner():
         try:
             df = read_csv_from_s3(S3_BUCKET, s3_key)
         except Exception:
-            print(f"⚠️ Missing file for {stock} in S3 → {s3_key}")
+            logger.warning(f"⚠️ Missing file for {stock} in S3 → {s3_key}")
             continue
 
         df.columns = df.columns.str.lower()
         if "close" not in df.columns or "date" not in df.columns:
-            print(f"⚠️ Skipping {stock} (missing 'date' or 'close')")
+            logger.warning(f"⚠️ Skipping {stock} (missing 'date' or 'close')")
             continue
 
         df["date"] = pd.to_datetime(df["date"])
@@ -99,7 +129,7 @@ def run_ema200_scanner():
                         "Date": latest["date"],
                         "Close": latest["close"]
                     })
-                    print(f"✅ {stock}: crossover on {cross_date.date()} — alignment valid")
+                    logger.info(f"✅ {stock}: crossover on {cross_date.date()} — alignment valid")
                 else:
                     watchlist_results.append({
                         "Stock Name": stock,
@@ -108,22 +138,21 @@ def run_ema200_scanner():
                         "Date": latest["date"],
                         "Close": latest["close"]
                     })
-                    #print(f"⚠️ {stock}: crossover on {cross_date.date()} — alignment NOT yet")
-        except Exception as e:
-            print(f"❌ Error in {stock}: {e}")
+        except Exception:
+            logger.exception(f"❌ Error in {stock}")
 
     # Save locally
     if aligned_results:
         pd.DataFrame(aligned_results).to_csv(OUTPUT_ALIGNED, index=False)
-        print(f"\n✅ Aligned breakout saved → {OUTPUT_ALIGNED}")
+        logger.info(f"\n✅ Aligned breakout saved → {OUTPUT_ALIGNED}")
     else:
-        print("\n⚠️ No stocks fully aligned today")
+        logger.warning("\n⚠️ No stocks fully aligned today")
 
     if watchlist_results:
         pd.DataFrame(watchlist_results).to_csv(OUTPUT_WATCHLIST, index=False)
-        print(f"\n⚠️ Watchlist saved → {OUTPUT_WATCHLIST}")
+        logger.info(f"\n⚠️ Watchlist saved → {OUTPUT_WATCHLIST}")
     else:
-        print("\nℹ️ No stocks in watchlist today")
+        logger.info("\nℹ️ No stocks in watchlist today")
 
     # === Upload CSVs to fixed S3 path ===
     if os.path.exists(OUTPUT_ALIGNED):
@@ -144,4 +173,5 @@ def run_ema200_scanner():
 
 # === Run directly ===
 if __name__ == "__main__":
+    logger.info("🔍 Running EMA200 breakout scanner...")
     run_ema200_scanner()
