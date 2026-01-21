@@ -57,17 +57,35 @@ async def main():
     logging.info("🤖 Telegram bot started (polling enabled)")
 
     # Schedule background tasks
-    asyncio.create_task(insidebar_daily_scheduler())
-    asyncio.create_task(insidebar_breakout_tracker())
-    asyncio.create_task(opposite_15m_scheduler())
-    asyncio.create_task(opposite_15m_breakout_tracker())
-    asyncio.create_task(terminate_at(target_hour=10, target_minute=30))
+    tasks = [
+        asyncio.create_task(insidebar_daily_scheduler()),
+        asyncio.create_task(insidebar_breakout_tracker()),
+        asyncio.create_task(opposite_15m_scheduler()),
+        asyncio.create_task(opposite_15m_breakout_tracker()),
+        asyncio.create_task(terminate_at(target_hour=10, target_minute=30))
+    ]
 
-    # Start polling (await inside async function)
-    await app.run_polling()
+    # Start polling
+    try:
+        await app.run_polling()
+    finally:
+        # Gracefully cancel all tasks on shutdown
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 # ───────────────────────────────
 # Entry point
 # ───────────────────────────────
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is already running (Jupyter/managed env), schedule main as a task
+            asyncio.ensure_future(main())
+        else:
+            # Run normally
+            loop.run_until_complete(main())
+    except RuntimeError:
+        # Fallback if loop cannot be retrieved
+        asyncio.run(main())
