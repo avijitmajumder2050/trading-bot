@@ -223,14 +223,12 @@ def build_opposite_ranges():
             continue
 
         c1, c2 = candles.iloc[0], candles.iloc[1]
-        c1_col = candle_color(c1)
 
         if candle_color(c1) != candle_color(c2):
             rows.append({
                 "date": today,
                 "security_id": sec_id,
                 "stock_name": nifty_id_to_stock_name.get(str(sec_id)),
-                "c1_color": c1_col,  
                 "c2_high": c2["high"],
                 "c2_low": c2["low"],
                 "range_high": max(c1["high"], c2["high"]),
@@ -307,11 +305,10 @@ def scan_nifty_stocks():
                 continue
 
             price = float(stock_data["last_price"])
-            c1_color = r.get("c1_color")
 
-            if price > r["range_high"] and c1_color == "GREEN":
+            if price > r["range_high"]:
                 signal, entry, sl = "BUY", r["range_high"], r["c2_low"]
-            elif price < r["range_low"] and c1_color == "RED":
+            elif price < r["range_low"]:
                 signal, entry, sl = "SELL", r["range_low"], r["c2_high"]
             else:
                 continue
