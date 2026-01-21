@@ -127,13 +127,13 @@ def calculate_position_size(price, entry, sl, sec_id, available_fund):
     max_loss = 1000
     qty_by_risk = int(max_loss / sl_point)
 
-    leverage = nifty_id_to_leverage.get(str(sec_id), 1)
+    nifty_leverage = nifty_id_to_leverage.get(str(sec_id), 1)
     if str(sec_id) not in nifty_id_to_leverage:
         logger.warning(f"⚠️ Leverage missing for sec_id={sec_id}. Using default=1")
     else:
-        logger.info(f"📊 Leverage for sec_id={sec_id} = {leverage}")
+        logger.info(f"📊 Leverage for sec_id={sec_id} = {nifty_leverage}")
 
-    qty_by_fund = int((available_fund * leverage) / price)
+    qty_by_fund = int((available_fund * nifty_leverage) / price)
     qty = min(qty_by_risk, qty_by_fund)
 
     return qty, qty * sl_point, qty * price
