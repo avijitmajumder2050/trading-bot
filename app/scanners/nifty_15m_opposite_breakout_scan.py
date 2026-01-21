@@ -144,6 +144,7 @@ def calculate_position_size(price, entry, sl, sec_id):
                 f"📊 Leverage for sec_id={sec_id} = {leveragenifty}"
             )
     fund = get_available_balance()
+    logging.info(f"Available balance: {fund}")
     qty_by_fund = int((fund * leveragenifty) / price)
 
     qty = min(qty_by_risk, qty_by_fund)
@@ -304,6 +305,10 @@ def scan_nifty_stocks():
             if qty <= 0:
                 continue
 
+            # Fetch fund and leverage for logging
+            fund = get_available_balance()
+            leveragenifty = nifty_id_to_leverage.get(str(sec_id), 1)
+
             results.append({
                 "Stock Name": r["stock_name"],
                 "Security ID": sec_id,
@@ -315,6 +320,12 @@ def scan_nifty_stocks():
                 "Expected Loss": round(loss, 2),
                 "Exposure": exposure,
             })
+            logger.info(
+    f"📊 Trade appended → {r['stock_name']} | SecID: {sec_id} | Price: {price} | "
+    f"Signal: {signal} | Entry: {entry} | SL: {sl} | Qty: {qty} | "
+    f"Expected Loss: {round(loss,2)} | Exposure: {exposure} | "
+    f"Fund: {round(fund,2)} | Leverage Nifty: {round(leveragenifty,2)}"
+)
 
         except Exception as e:
             logger.error(f"Skipping sec_id={sec_id} due to error: {e}")
