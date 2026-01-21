@@ -181,6 +181,7 @@ async def opposite_15m_breakout_tracker():
                         f"🛑 SL: {hit['SL']}\n"
                         f"📦 Qty: {hit['Quantity']}\n"
                         f"💸 Risk: ₹{hit['Expected Loss']}\n"
+                        f"💼 Exposure: ₹{round(hit['Exposure'], 2)}\n"
                         f"🕒 {datetime.now().strftime('%H:%M:%S')}"
                     )
 
