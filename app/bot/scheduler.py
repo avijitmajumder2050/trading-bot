@@ -8,6 +8,7 @@ from app.bot.telegram_sender import send_telegram_message
 from app.scanners.inside_bar_15min_RS80 import run_inside_bar_algo_scan
 from app.scanners.inside_bar_algo import track_insidebar_algo_breakouts_bot
 from app.utils.get_instance_id import get_instance_id  # your existing function
+from app.utils.ec2_launcher import check_csv_and_launch_ec2  # import your function
 from app.scanners.nifty_15m_opposite_breakout_scan import (
     build_opposite_ranges,
     scan_nifty_stocks
@@ -219,3 +220,43 @@ async def terminate_at(target_hour=10, target_minute=40):
         await asyncio.sleep(20)
 
 
+# --------------------------
+# EC2 Launch Scheduler @ configurable time
+# --------------------------
+
+# --------------------------
+# EC2 Launch Scheduler @ 9:55 IST
+# --------------------------
+
+
+
+
+async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
+    """
+    Runs once per day at given time.
+    Launches EC2 only if CSV has >= 3 rows.
+    """
+    EC2_LAUNCH_TIME = time(launch_hour, launch_minute)
+
+    last_run_date = None
+
+    while True:
+        try:
+            now = datetime.now(IST)
+            today = now.date()
+
+            if last_run_date != today and now.time() >= EC2_LAUNCH_TIME:
+                logging.info(
+                    f"🚀 EC2 launch scheduler triggered at "
+                    f"{EC2_LAUNCH_TIME.strftime('%H:%M')}"
+                )
+
+                result = check_csv_and_launch_ec2()
+                logging.info(f"📊 EC2 launch result: {result}")
+
+                last_run_date = today
+
+        except Exception as e:
+            logging.error(f"❌ EC2 launch scheduler error: {e}")
+
+        await asyncio.sleep(20)
