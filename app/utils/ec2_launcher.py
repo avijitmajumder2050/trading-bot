@@ -44,7 +44,7 @@ def check_csv_and_launch_ec2():
         row_count = max(0, len(lines) - 1)  # exclude header
         logger.info(f"📊 CSV rows (excluding header): {row_count}")
 
-        if row_count < 3:
+        if row_count < 1:
             logger.info("⚠️ Not enough rows to launch EC2")
             return {"status": "not_enough_rows"}
 
@@ -65,3 +65,4 @@ def check_csv_and_launch_ec2():
 
 if __name__ == "__main__":
     check_csv_and_launch_ec2()
+
