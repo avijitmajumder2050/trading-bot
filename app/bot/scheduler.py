@@ -228,7 +228,7 @@ async def terminate_after_delay(delay_minutes=3):
         logging.error("❌ Cannot terminate — instance ID not found")
         return
     logging.info(f"⏳ {delay_minutes} minutes elapsed. Terminating EC2 {instance_id}...")
-    await send_telegram_message(f"⏳ {delay_minutes} minutes elapsed. Terminating EC2 {instance_id}...")
+    await send_telegram_message(f"⏳ {delay_minutes} minutes elapsed. Terminating EC2 ...")
     terminate_instance(instance_id)
 # --------------------------
 # EC2 Launch Scheduler @ configurable time
