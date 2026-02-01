@@ -14,6 +14,7 @@ from app.scanners.nifty_15m_opposite_breakout_scan import (
     scan_nifty_stocks
 )
 import threading
+import random
 
 # --------------------------
 # InsideBar 5-min scan state
@@ -219,7 +220,16 @@ async def terminate_at(target_hour=10, target_minute=40):
             break
         await asyncio.sleep(20)
 
-
+async def terminate_after_delay(delay_minutes=3):
+    """Terminate EC2 after X minutes from launch."""
+    await asyncio.sleep(delay_minutes * 60)
+    instance_id = get_instance_id()
+    if not instance_id or instance_id == "UNKNOWN":
+        logging.error("❌ Cannot terminate — instance ID not found")
+        return
+    logging.info(f"⏳ {delay_minutes} minutes elapsed. Terminating EC2 {instance_id}...")
+    await send_telegram_message(f"⏳ {delay_minutes} minutes elapsed. Terminating EC2 {instance_id}...")
+    terminate_instance(instance_id)
 # --------------------------
 # EC2 Launch Scheduler @ configurable time
 # --------------------------
@@ -253,6 +263,9 @@ async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
 
                 result = check_csv_and_launch_ec2()
                 logging.info(f"📊 EC2 launch result: {result}")
+                 # 🔥 AUTO-TERMINATE IN 3 MINUTES
+                delay = random.randint(2, 5)
+                asyncio.create_task(terminate_after_delay(delay_minutes=delay))
 
                 last_run_date = today
 
