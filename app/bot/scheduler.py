@@ -260,10 +260,23 @@ async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
 
                 result = check_csv_and_launch_ec2()
                 logging.info(f"📊 EC2 launch result: {result}")
-                 # 🔥 AUTO-TERMINATE IN 3 MINUTES
-                delay = random.randint(2, 5)
-                asyncio.create_task(terminate_after_delay(delay_minutes=delay))
+                status = result.get("status")
+                
+                if status == "success":
+                    logging.info("✅ EC2 launch successful, scheduling auto-termination")
 
+                    # 🔥 AUTO-TERMINATE IN 3 MINUTES
+                    delay = random.randint(2, 5)
+                    asyncio.create_task(terminate_after_delay(delay_minutes=delay))
+                elif status == "not_enough_rows":
+                    logging.info(
+                        "⚠️ EC2 NOT launched — CSV row count below threshold"
+                    )
+                else:
+                    logging.error(
+                        f"❌ EC2 launch failed with status: {status}"
+                    )  
+                 
                 last_run_date = today
 
         except Exception as e:
