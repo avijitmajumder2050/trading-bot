@@ -1,6 +1,7 @@
 import boto3
 import logging
 
+logger = logging.getLogger(__name__)
 # ── Config ──
 BUCKET = "dhan-trading-data"
 CSV_KEY = "uploads/nifty_15m_breakout_signals.csv"
@@ -9,8 +10,7 @@ EC2_REGION = "ap-south-1"
 # SSM Parameter where Launch Template ID is stored
 SSM_PARAM_NAME = "/trading-bot-algo/ec2/launch_template_id"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
-logger = logging.getLogger()
+
 
 def get_launch_template_id_from_ssm():
     """Fetch Launch Template ID from SSM Parameter Store"""
@@ -44,7 +44,7 @@ def check_csv_and_launch_ec2():
         row_count = max(0, len(lines) - 1)  # exclude header
         logger.info(f"📊 CSV rows (excluding header): {row_count}")
 
-        if row_count < 1:
+        if row_count < 3:
             logger.info("⚠️ Not enough rows to launch EC2")
             return {"status": "not_enough_rows"}
 

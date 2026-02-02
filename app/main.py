@@ -62,7 +62,7 @@ async def post_init(app):
     app.create_task(insidebar_breakout_tracker())
     app.create_task(opposite_15m_scheduler())
     app.create_task(opposite_15m_breakout_tracker())
-    app.create_task(ec2_launch_scheduler(launch_hour=9, launch_minute=45))
+    app.create_task(ec2_launch_scheduler(launch_hour=9, launch_minute=55))
     app.create_task(terminate_at(target_hour=10, target_minute=50))
 
 # ───────────────────────────────

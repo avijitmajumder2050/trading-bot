@@ -238,9 +238,6 @@ async def terminate_after_delay(delay_minutes=3):
 # EC2 Launch Scheduler @ 9:55 IST
 # --------------------------
 
-
-
-
 async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
     """
     Runs once per day at given time.
