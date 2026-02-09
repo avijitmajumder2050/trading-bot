@@ -238,48 +238,48 @@ async def terminate_after_delay(delay_minutes=3):
 # EC2 Launch Scheduler @ 9:55 IST
 # --------------------------
 
-
 async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
     """
-    Retry EC2 launch starting at launch_hour:launch_minute.
-    If CSV rows < 3, retry every 1 minute until launch succeeds.
+    Runs once per day at given time.
+    Launches EC2 only if CSV has >= 3 rows.
     """
     EC2_LAUNCH_TIME = time(launch_hour, launch_minute)
-    ec2_launched_today = False
+
+    last_run_date = None
 
     while True:
-        now = datetime.now(IST)
-        today = now.date()
+        try:
+            now = datetime.now(IST)
+            today = now.date()
 
-        # Reset flag at midnight
-        if now.hour == 0 and now.minute == 0:
-            ec2_launched_today = False
+            if last_run_date != today and now.time() >= EC2_LAUNCH_TIME:
+                logging.info(
+                    f"🚀 EC2 launch scheduler triggered at "
+                    f"{EC2_LAUNCH_TIME.strftime('%H:%M')}"
+                )
 
-        # Only start trying after launch time
-        if not ec2_launched_today and now.time() >= EC2_LAUNCH_TIME:
-            logging.info(f"⏱ Checking CSV for EC2 launch at {now.strftime('%H:%M:%S')}")
-
-            try:
                 result = check_csv_and_launch_ec2()
                 logging.info(f"📊 EC2 launch result: {result}")
                 status = result.get("status")
-
+                
                 if status == "success":
-                    logging.info(f"✅ EC2 launched successfully at {now.strftime('%H:%M:%S')}")
-                    # Schedule auto-termination 2-5 minutes later
+                    logging.info("✅ EC2 launch successful, scheduling auto-termination")
+
+                    # 🔥 AUTO-TERMINATE IN 3 MINUTES
                     delay = random.randint(2, 5)
                     asyncio.create_task(terminate_after_delay(delay_minutes=delay))
-                    ec2_launched_today = True  # stop retrying for today
-
                 elif status == "not_enough_rows":
-                    logging.info(f"⚠️ CSV rows < 3 at {now.strftime('%H:%M:%S')}, retrying in 1 min")
-
+                    logging.info(
+                        "⚠️ EC2 NOT launched — CSV row count below threshold"
+                    )
                 else:
-                    logging.error(f"❌ EC2 launch failed at {now.strftime('%H:%M:%S')} with status {status}")
-                    ec2_launched_today = True  # stop retrying for today on other errors
+                    logging.error(
+                        f"❌ EC2 launch failed with status: {status}"
+                    )  
+                 
+                last_run_date = today
 
-            except Exception as e:
-                logging.error(f"❌ EC2 launch scheduler exception: {e}")
+        except Exception as e:
+            logging.error(f"❌ EC2 launch scheduler error: {e}")
 
-        # Retry interval = 1 minute
-        await asyncio.sleep(60)
+        await asyncio.sleep(20)
