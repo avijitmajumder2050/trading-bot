@@ -9,7 +9,7 @@ from app.config.aws_ssm import get_param
 IST = timezone("Asia/Kolkata")
 
 # --- Scan Times ---
-INSIDEBAR_SCAN_TIME = time(9, 31)  # 9:31 AM
+INSIDEBAR_SCAN_TIME = time(9, 26)  # 9:31 AM
 
 # --- AWS Config ---
 AWS_REGION = os.getenv("AWS_REGION", "ap-south-1")
