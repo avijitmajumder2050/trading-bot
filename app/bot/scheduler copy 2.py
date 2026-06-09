@@ -9,7 +9,6 @@ from app.scanners.inside_bar_15min_RS80 import run_inside_bar_algo_scan
 from app.scanners.inside_bar_algo import track_insidebar_algo_breakouts_bot
 from app.utils.get_instance_id import get_instance_id  # your existing function
 from app.utils.ec2_launcher import check_csv_and_launch_ec2  # import your function
-from app.utils.save_insidebar_breakout import save_insidebar_breakout
 from app.scanners.nifty_15m_opposite_breakout_scan import (
     build_opposite_ranges,
     scan_nifty_stocks
@@ -107,7 +106,6 @@ async def insidebar_breakout_tracker():
                     )
 
                     await send_telegram_message(msg)
-                    save_insidebar_breakout(hit)
 
         except Exception as e:
             logging.error(f"❌ InsideBar breakout tracker error: {e}")
