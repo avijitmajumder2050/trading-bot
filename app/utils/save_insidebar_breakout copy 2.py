@@ -8,9 +8,8 @@ from datetime import datetime
 from botocore.exceptions import ClientError
 
 from app.config.settings import IST
-from app.config.aws_s3 import S3_BUCKET
 
-
+BUCKET = "dhan-trading-data"
 KEY = "uploads/fyer_insiderbar_brekout.csv"
 
 s3 = boto3.client("s3")
@@ -32,7 +31,7 @@ def save_insidebar_breakout(hit):
 
     try:
         obj = s3.get_object(
-            Bucket=S3_BUCKET,
+            Bucket=BUCKET,
             Key=KEY
         )
         df = pd.read_csv(obj["Body"])
@@ -104,12 +103,12 @@ def save_insidebar_breakout(hit):
     df.to_csv(csv_buffer, index=False)
 
     s3.put_object(
-        Bucket=S3_BUCKET,
+        Bucket=BUCKET,
         Key=KEY,
         Body=csv_buffer.getvalue()
     )
 
     logging.info(
         f"💾 Saved {hit['Stock Name']} "
-        f"(SL%={sl_pct}) to s3://{S3_BUCKET}/{KEY}"
+        f"(SL%={sl_pct}) to s3://{BUCKET}/{KEY}"
     )
