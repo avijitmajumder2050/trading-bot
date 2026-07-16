@@ -1,9 +1,10 @@
+#app/utils/c2_launcher.py
 import boto3
 import logging
-
+from app.config.aws_s3 import S3_BUCKET
 logger = logging.getLogger(__name__)
 # ── Config ──
-BUCKET = "dhan-trading-data"
+
 CSV_KEY = "uploads/nifty_15m_breakout_signals.csv"
 EC2_REGION = "ap-south-1"
 
@@ -38,7 +39,7 @@ def check_csv_and_launch_ec2():
 
     try:
         # Read CSV from S3
-        obj = s3.get_object(Bucket=BUCKET, Key=CSV_KEY)
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=CSV_KEY)
         lines = obj['Body'].read().decode('utf-8').splitlines()
 
         row_count = max(0, len(lines) - 1)  # exclude header
