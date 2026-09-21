@@ -273,6 +273,13 @@ async def ec2_launch_scheduler(launch_hour=9, launch_minute=55):
                     asyncio.create_task(terminate_after_delay(delay_minutes=delay))
                     ec2_launched_today = True  # stop retrying for today
 
+                elif status == "already_running":
+                    logging.info(
+                        f"♻️ EC2 already running ({result.get('instance_id')}) at "
+                        f"{now.strftime('%H:%M:%S')} — skipping launch"
+                    )
+                    ec2_launched_today = True  # stop retrying for today
+
                 elif status == "not_enough_rows":
                     logging.info(f"⚠️ CSV rows < 3 at {now.strftime('%H:%M:%S')}, retrying in 1 min")
 

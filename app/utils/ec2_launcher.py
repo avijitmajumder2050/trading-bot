@@ -11,6 +11,31 @@ EC2_REGION = "ap-south-1"
 # SSM Parameter where Launch Template ID is stored
 SSM_PARAM_NAME = "/trading-bot-algo/ec2/launch_template_id"
 
+# Tag used to identify instances launched by this bot
+INSTANCE_TAG_KEY = "Name"
+INSTANCE_TAG_VALUE = "trading-bot-algo"
+
+
+def get_existing_instance_id(ec2=None):
+    """
+    Returns the InstanceId of an already pending/running trading-bot-algo
+    EC2 instance, or None if none exists.
+    """
+    ec2 = ec2 or boto3.client("ec2", region_name=EC2_REGION)
+    try:
+        response = ec2.describe_instances(
+            Filters=[
+                {"Name": f"tag:{INSTANCE_TAG_KEY}", "Values": [INSTANCE_TAG_VALUE]},
+                {"Name": "instance-state-name", "Values": ["pending", "running"]},
+            ]
+        )
+        for reservation in response.get("Reservations", []):
+            for instance in reservation.get("Instances", []):
+                return instance["InstanceId"]
+        return None
+    except Exception as e:
+        logger.error(f"❌ Failed to check for existing EC2 instance: {e}")
+        return None
 
 
 def get_launch_template_id_from_ssm():
@@ -28,10 +53,18 @@ def get_launch_template_id_from_ssm():
 
 def check_csv_and_launch_ec2():
     """
-    Reads CSV from S3, checks number of rows, launches EC2 if >= 3 rows.
+    Reads CSV from S3, checks number of rows, launches EC2 if >= 3 rows
+    and no trading-bot-algo instance is already running.
     """
     s3 = boto3.client("s3")
     ec2 = boto3.client("ec2", region_name=EC2_REGION)
+
+    existing_instance_id = get_existing_instance_id(ec2)
+    if existing_instance_id:
+        logger.info(
+            f"♻️ EC2 instance already running: {existing_instance_id} — skipping launch"
+        )
+        return {"status": "already_running", "instance_id": existing_instance_id}
 
     launch_template_id = get_launch_template_id_from_ssm()
     if not launch_template_id:
@@ -53,7 +86,15 @@ def check_csv_and_launch_ec2():
         response = ec2.run_instances(
             LaunchTemplate={'LaunchTemplateId': launch_template_id},
             MinCount=1,
-            MaxCount=1
+            MaxCount=1,
+            TagSpecifications=[
+                {
+                    "ResourceType": "instance",
+                    "Tags": [
+                        {"Key": INSTANCE_TAG_KEY, "Value": INSTANCE_TAG_VALUE}
+                    ],
+                }
+            ],
         )
         instance_id = response['Instances'][0]['InstanceId']
         logger.info(f"✅ EC2 instance launched: {instance_id}")
