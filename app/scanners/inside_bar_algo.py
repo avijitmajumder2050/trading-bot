@@ -17,7 +17,7 @@ from app.config.settings import (
     MAP_FILE_KEY, CANDLE_FILE_KEY, FILTERED_FILE_KEY
 )
 from app.config.aws_ssm import get_param
-from app.utils.alert_goodresult import strong_quarterly_alert
+from app.utils.alert_goodresult import strong_quarterly_symbols
 
 # ─────────────────────────────
 # LOGGING (NO LOGIC CHANGE)
@@ -64,6 +64,10 @@ dhan = dhanhq(DhanContext(client_id=DHAN_CLIENT_ID, access_token=DHAN_ACCESS_TOK
 # ─────────────────────────────
 last_insidebar_run_date = None
 cached_fund = None
+# Stocks that passed the strong-quarterly filter today stay passed — the live
+# filter flickers tick to tick, which delayed breakouts by minutes.
+quarterly_passed_today = set()
+quarterly_passed_day = None
 
 # ─────────────────────────────
 # Helpers
@@ -141,6 +145,7 @@ def track_insidebar_algo_breakouts_bot():
         return []
 
     breakout_hits = []
+    all_quotes = {}
     sec_ids = df_filtered["security id"].astype(int).tolist()
     cached_fund = get_available_balance()
 
@@ -152,6 +157,7 @@ def track_insidebar_algo_breakouts_bot():
         if not live_quotes:
             logger.warning(f"⚠️ Empty quote packet")
             continue
+        all_quotes.update({int(k): v for k, v in live_quotes.items()})
 
         for sec_id in pkt:
             row = df_filtered[df_filtered["security id"] == sec_id].iloc[0]
@@ -203,14 +209,23 @@ def track_insidebar_algo_breakouts_bot():
                     "Leverage": 1
                 })
 
-    # Strong Quarterly Filter
+    # Strong Quarterly Filter — only for current hits, using quotes already fetched above
+    global quarterly_passed_today, quarterly_passed_day
+    today = datetime.now(IST).date()
+    if quarterly_passed_day != today:
+        quarterly_passed_today = set()
+        quarterly_passed_day = today
+
+    if not breakout_hits:
+        return []
+
     try:
-        time.sleep(2)
-        alerts, _ = strong_quarterly_alert()
-        valid_symbols = {a.split()[1] for a in alerts if "🔔" in a}
+        pending = {h["Stock Name"] for h in breakout_hits} - quarterly_passed_today
+        if pending:
+            quarterly_passed_today |= strong_quarterly_symbols(pending, all_quotes)
         breakout_hits = [
             hit for hit in breakout_hits
-            if hit["Stock Name"] in valid_symbols
+            if hit["Stock Name"] in quarterly_passed_today
         ]
         logger.info(
             f"✅ After strong_quarterly_alert filter: {len(breakout_hits)} hits"

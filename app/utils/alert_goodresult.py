@@ -69,73 +69,81 @@ def read_csv_from_s3(key):
         logging.error(f"❌ Failed to read CSV from S3 ({key}): {e}")
         return pd.DataFrame()
 
-# === Load EOD data from S3 ===
+# === Daily base from EOD (computed once per day — EOD files only change after close) ===
+# Each scan cycle then only needs the live LTP: today's EMA is one step on top of
+# yesterday's EMA, identical to re-running ewm(adjust=False) over the whole history.
+_daily_base = {}
+_daily_base_day = None
+
+
+def _load_daily_base(instrument_id):
+    """prev_high + yesterday's EMA10/20/50 for one stock, cached for the day (None if unavailable)."""
+    global _daily_base_day
+    today = datetime.now(IST).date()
+    if _daily_base_day != today:
+        _daily_base.clear()
+        _daily_base_day = today
+    if instrument_id in _daily_base:
+        return _daily_base[instrument_id]
+
+    base = None
+    df = read_csv_from_s3(f"eod_data/{instrument_id}.csv")
+    if not df.empty:
+        df = df.rename(columns=str.lower)
+        df = df[["date", "open", "high", "low", "close", "volume"]].dropna()
+        df["date"] = pd.to_datetime(df["date"])
+        df = df[df["date"].dt.date < today].sort_values("date")   # today's row comes from LTP
+        if len(df) >= 9:                                          # 9 history + today = 10 bars
+            prev = df.iloc[-1]
+            if prev["close"] > prev["open"]:
+                prev_high = prev["close"]
+            elif prev["close"] < prev["open"]:
+                prev_high = prev["open"]
+            else:
+                prev_high = prev["high"]
+            closes = df["close"]
+            base = {
+                "prev_high": float(prev_high),
+                "ema10": float(closes.ewm(span=10, adjust=False).mean().iloc[-1]),
+                "ema20": float(closes.ewm(span=20, adjust=False).mean().iloc[-1]),
+                "ema50": float(closes.ewm(span=50, adjust=False).mean().iloc[-1]),
+            }
+    _daily_base[instrument_id] = base
+    return base
+
+
 def load_today_data_with_ema(instrument_id, live):
-    key = f"eod_data/{instrument_id}.csv"
-    df = read_csv_from_s3(key)
-    if df.empty:
-        logging.warning(f"⚠️ Missing EOD file for {instrument_id}")
+    base = _load_daily_base(instrument_id)
+    if base is None:
+        logging.warning(f"⚠️ Missing / short EOD data for {instrument_id}")
         return None
 
-    df = df.rename(columns=str.lower)
-    df = df[["date", "open", "high", "low", "close", "volume"]].dropna()
-    df["date"] = pd.to_datetime(df["date"])
-    df.set_index("date", inplace=True)
-    df.sort_index(inplace=True)
-
-    today = pd.Timestamp(datetime.today().date())
-    ohlc = live["ohlc"]
-    df.loc[today] = {
-        "open": ohlc["open"],
-        "high": ohlc["high"],
-        "low": ohlc["low"],
-        "close": live["last_price"],
-        "volume": live["volume"]
-    }
-    df.sort_index(inplace=True)
-
-    if len(df) < 10:
-        logging.warning(f"⚠️ Not enough data for EMA calculation: {instrument_id}")
-        return None
-
-    df["ema10"] = df["close"].ewm(span=10, adjust=False).mean()
-    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
-    df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
-
-    latest = df.iloc[-1]
-    prev = df.iloc[-2]
-    if prev["close"] > prev["open"]:
-        prev_high = prev["close"]
-    elif prev["close"] < prev["open"]:
-        prev_high = prev["open"]
-    else:
-        prev_high = prev["high"]
-
+    ltp = live["last_price"]
+    step = lambda prev_ema, span: prev_ema + (2 / (span + 1)) * (ltp - prev_ema)
     return {
-        "prev_high": prev_high,
-        "today_low": latest["low"],
-        "ema10": latest["ema10"],
-        "ema20": latest["ema20"],
-        "ema50": latest["ema50"]
+        "prev_high": base["prev_high"],
+        "today_low": live["ohlc"]["low"],
+        "ema10": step(base["ema10"], 10),
+        "ema20": step(base["ema20"], 20),
+        "ema50": step(base["ema50"], 50),
     }
 
-# === Main Alert Function ===
-def strong_quarterly_alert():
+
+def _load_setup_map():
     df_map = read_csv_from_s3(MAP_FILE_KEY)
     if df_map.empty:
         logging.info("ℹ️ Mapping CSV is empty")
-        return [], []
-
+        return df_map
     df_map = df_map[["Stock Name", "Instrument ID", "Market Cap", "Setup_Case"]].dropna()
     df_map["Instrument ID"] = df_map["Instrument ID"].astype(int)
     df_map = df_map[df_map["Setup_Case"].isin(["Case A", "Case B", "Case C"])]
     if df_map.empty:
         logging.info("ℹ️ No instruments with Setup_Case found.")
-        return [], []
+    return df_map
 
-    instrument_ids = df_map["Instrument ID"].tolist()
-    live_data = fetch_live_data(instrument_ids)
 
+def _quarterly_breakouts(df_map, live_data):
+    """All mapped stocks currently meeting the strong-quarterly breakout rule, best % change first."""
     breakout_rows = []
     for _, row in df_map.iterrows():
         iid = row["Instrument ID"]
@@ -166,6 +174,32 @@ def strong_quarterly_alert():
             })
 
     breakout_rows.sort(key=lambda x: x["change"], reverse=True)
+    return breakout_rows
+
+
+def strong_quarterly_symbols(symbols, live_data):
+    """
+    Which of `symbols` meet the strong-quarterly rule right now — no top-15 cap.
+    Uses the caller's live quotes ({security_id(int): dhan quote}), so no extra
+    API call, and only evaluates the given symbols.
+    """
+    df_map = _load_setup_map()
+    if df_map.empty:
+        return set()
+    df_map = df_map[df_map["Stock Name"].isin(symbols)]
+    return {b["symbol"] for b in _quarterly_breakouts(df_map, live_data)}
+
+
+# === Main Alert Function ===
+def strong_quarterly_alert():
+    df_map = _load_setup_map()
+    if df_map.empty:
+        return [], []
+
+    instrument_ids = df_map["Instrument ID"].tolist()
+    live_data = fetch_live_data(instrument_ids)
+
+    breakout_rows = _quarterly_breakouts(df_map, live_data)
     top_15 = breakout_rows[:15]
     alerts = [f"🔔 {b['symbol']} LTP {b['ltp']} > Prev High {b['prev_high']} (+{b['change']}%)" for b in top_15]
 
