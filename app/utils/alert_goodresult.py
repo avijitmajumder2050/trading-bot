@@ -161,7 +161,7 @@ def _quarterly_breakouts(df_map, live_data):
         ema10, ema20, ema50 = round(eod["ema10"], 2), round(eod["ema20"], 2), round(eod["ema50"], 2)
         ltp = live.get("last_price", 0)
 
-        if ltp > prev_high and ema20 > ema50 and (today_low < ema10 or today_low < ema20):
+        if ltp > prev_high and ema10 > ema20 > ema50 and (today_low < ema10 or today_low < ema20):
             change = round((ltp - prev_high) / prev_high * 100, 2)
             breakout_rows.append({
                 "symbol": symbol,
